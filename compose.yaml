@@ -1,6 +1,7 @@
 services:
   dashboard:
-    build: .
+    image: ghcr.io/rexx09/repo-service-dashboard:latest
+    pull_policy: always
     restart: unless-stopped
     env_file: .env
     ports:

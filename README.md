@@ -10,12 +10,19 @@ Voraussetzungen: Docker Engine mit `docker compose`; ein GitHub Personal Access 
 cp .env.example .env
 # .env bearbeiten: DASHBOARD_PASSWORD durch ein langes zufälliges Passwort ersetzen
 # GITHUB_TOKEN ergänzen (kein Token im Git-Repository speichern!)
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Dashboard lokal am **Host**: <http://127.0.0.1:8080>. Der Browser fragt nach Benutzername/Passwort aus `.env`. Docker bindet den Port **nur an localhost**, nicht an das öffentliche Netzwerk. Auf einem anderen Computer im LAN ist localhost **nicht** die Serveradresse: nutze Tailscale Serve oder SSH-Portweiterleitung.
 
 **Wichtig:** HTTP Basic Authentication über unverschlüsseltes HTTP ist nur für Loopback/SSH-Tunnel geeignet. Nicht öffentlich auf Port 8080 freigeben!
+
+## Dockge / Container-Image
+
+GitHub Actions baut und veröffentlicht bei Pushes auf `main` das Image `ghcr.io/rexx09/repo-service-dashboard:latest`. Warte nach einer Änderung auf den erfolgreichen Workflow, bevor du den Stack in Dockge aktualisierst. Die Compose-Datei zieht das Image bei jedem Start automatisch.
+
+Für Dockge reichen `compose.yaml` und eine danebenliegende `.env`; Quellcode und `Dockerfile` müssen nicht auf dem Docker-Host liegen. Vor dem ersten Start muss der GHCR-Paketzugriff öffentlich sein, damit der Host das Image ohne Registry-Anmeldung ziehen kann. Die Paket-Sichtbarkeit lässt sich nach dem ersten erfolgreichen Build in den Paket-Einstellungen ändern.
 
 ## Remote sicher öffnen (empfohlen: Tailscale)
 
@@ -62,7 +69,8 @@ HTTP 2xx–4xx gilt als erreichbar (z. B. Login mit HTTP 401), HTTP 5xx als gest
 ```bash
 docker compose logs -f dashboard
 docker compose down         # stoppt den Container, Daten-Volume bleibt erhalten
-docker compose up -d --build  # aktualisiert nach Änderungen
+docker compose pull
+docker compose up -d         # startet bzw. aktualisiert das Image
 ```
 
 Ohne Docker lokal entwickeln:
@@ -91,4 +99,5 @@ app/static/app.js       Suchfilter, API, Formulare und Live-Refresh
 compose.yaml            Docker Compose mit localhost-Portbindung
 Dockerfile              Unprivilegierter Python-Container
 .env.example            Konfigurationsvorlage
+.github/workflows/      Automatischer Build und Veröffentlichung auf GHCR
 ```
