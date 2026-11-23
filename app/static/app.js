@@ -2,7 +2,10 @@
 const $ = id => document.getElementById(id);
 let data = {repos: [], services: [], meta: {}};
 let editingId = null;
+let editingTileId = null;
 let setupMode = false;
+let layoutMode = false;
+let draggedServiceId = null;
 
 const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -71,6 +74,17 @@ function showError(message) {
     $('alerts').replaceChildren(alert);
 }
 
+function refreshTileStyles() {
+    let stylesheet = $('tileStylesheet');
+    if (!stylesheet) {
+        stylesheet = el('link');
+        stylesheet.id = 'tileStylesheet';
+        stylesheet.rel = 'stylesheet';
+        document.head.append(stylesheet);
+    }
+    stylesheet.href = '/api/tiles.css?v=' + Date.now();
+}
+
 function showAuth(requiredSetup) {
     setupMode = requiredSetup;
     $('appShell').hidden = true;
@@ -92,6 +106,55 @@ function showAuth(requiredSetup) {
     $('authUsername').focus();
 }
 
+async function saveTileOrder(serviceIds) {
+    data.services = data.services
+        .map(service => ({...service, tile_position: serviceIds.indexOf(service.id)}))
+        .sort((left, right) => left.tile_position - right.tile_position);
+    render();
+    try {
+        await api('/api/tiles/order', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({service_ids: serviceIds})
+        });
+    } catch (error) {
+        showError(error.message);
+        await refresh();
+    }
+}
+
+function moveTileRelative(sourceId, targetId, after) {
+    if (!layoutMode || sourceId === targetId) return;
+    const serviceIds = data.services.map(service => service.id);
+    const sourceIndex = serviceIds.indexOf(sourceId);
+    const targetIndex = serviceIds.indexOf(targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    serviceIds.splice(sourceIndex, 1);
+    serviceIds.splice(serviceIds.indexOf(targetId) + Number(after), 0, sourceId);
+    void saveTileOrder(serviceIds);
+}
+
+function moveTileBy(serviceId, offset) {
+    const serviceIds = data.services.map(service => service.id);
+    const currentIndex = serviceIds.indexOf(serviceId);
+    const nextIndex = Math.max(0, Math.min(serviceIds.length - 1, currentIndex + offset));
+    if (currentIndex < 0 || nextIndex === currentIndex) return;
+    serviceIds.splice(currentIndex, 1);
+    serviceIds.splice(nextIndex, 0, serviceId);
+    void saveTileOrder(serviceIds);
+}
+
+function openTileDialog(service) {
+    editingTileId = service.id;
+    const form = $('tileForm');
+    form.elements.width.value = service.tile_width;
+    form.elements.height.value = service.tile_height;
+    form.elements.color.value = service.tile_color;
+    form.elements.shape.value = service.tile_shape;
+    $('tileFormError').textContent = '';
+    $('tileDialog').showModal();
+}
+
 function render() {
     const services = data.services || [];
     const repos = data.repos || [];
@@ -108,6 +171,10 @@ function render() {
     if (data.meta.github_error) showError(data.meta.github_error);
     if (data.meta.monitor_error) showError(data.meta.monitor_error);
 
+    $('appShell').classList.toggle('layout-editing', layoutMode);
+    $('layoutButton').textContent = layoutMode ? 'Fertig' : 'Layout anpassen';
+    $('layoutHint').hidden = !layoutMode;
+    $('statusFilter').disabled = layoutMode;
     const filtered = services.filter(service => $('statusFilter').value === 'all' || $('statusFilter').value === service.status);
     const serviceList = $('serviceList');
     serviceList.replaceChildren();
@@ -118,14 +185,23 @@ function render() {
     }
 
     for (const service of filtered) {
-        const card = el('article', 'service-card');
-        const top = el('div', 'svc-top');
+        const card = el(
+            'article',
+            `service-tile tile--w${service.tile_width} tile--h${service.tile_height} tile--${service.tile_shape}`
+        );
+        card.id = `service-tile-${service.id}`;
+        card.draggable = layoutMode;
+        const mainLink = link(service.url, '', 'tile-main');
+        mainLink.onclick = event => {
+            if (layoutMode) event.preventDefault();
+        };
+        const heading = el('div', 'tile-heading');
         const identity = el('div');
         identity.append(
-            el('div', 'svc-name', service.name),
-            el('div', 'svc-sub', service.repo_full_name || 'Ohne Repository-Zuordnung')
+            el('div', 'tile-name', service.name),
+            el('div', 'tile-repo', service.repo_full_name || 'Ohne Repository-Zuordnung')
         );
-        top.append(
+        heading.append(
             identity,
             el('span', 'status ' + service.status, ({
                 online: 'Online',
@@ -134,19 +210,33 @@ function render() {
                 pending: 'Ausstehend'
             })[service.status] || service.status)
         );
-        card.append(top, link(service.url, hostLabel(service.url), 'svc-url'));
+        const footer = el('div', 'tile-footer');
+        footer.append(
+            el('span', service.error ? 'tile-error' : 'tile-meta', service.error
+                || (service.last_checked ? `${service.latency_ms} ms · ${dateStr(service.last_checked)}` : 'Noch nicht geprüft')),
+            el('span', 'tile-open', '↗')
+        );
+        mainLink.append(heading, footer);
+        card.append(mainLink);
 
-        const bottom = el('div', 'svc-bottom');
-        const links = el('div', 'svc-links');
-        links.append(link(service.url, '↗ Öffnen', 'mini'));
-        if (service.repo_full_name) {
-            const repo = repos.find(item => item.full_name === service.repo_full_name);
-            if (repo) links.append(link(repo.url, 'GitHub', 'mini'));
-        }
-
-        const edit = el('button', 'mini', 'Bearbeiten');
+        const controls = el('div', 'tile-controls');
+        controls.append(el('span', 'tile-handle', '⠿ Ziehen'));
+        const up = el('button', 'mini', '↑');
+        up.type = 'button';
+        up.title = 'Kachel nach oben verschieben';
+        up.onclick = () => moveTileBy(service.id, -1);
+        const down = el('button', 'mini', '↓');
+        down.type = 'button';
+        down.title = 'Kachel nach unten verschieben';
+        down.onclick = () => moveTileBy(service.id, 1);
+        const design = el('button', 'mini', 'Design');
+        design.type = 'button';
+        design.onclick = () => openTileDialog(service);
+        const edit = el('button', 'mini', 'Service');
+        edit.type = 'button';
         edit.onclick = () => openDialog(service);
         const remove = el('button', 'mini', '×');
+        remove.type = 'button';
         remove.title = 'Service löschen';
         remove.onclick = async () => {
             if (!confirm(`Service „${service.name}“ wirklich löschen?`)) return;
@@ -157,19 +247,39 @@ function render() {
                 showError(error.message);
             }
         };
-        links.append(edit, remove);
-        bottom.append(
-            el('div', 'meta', service.last_checked
-                ? `${service.latency_ms} ms · ${dateStr(service.last_checked)}`
-                : 'Noch nicht geprüft'),
-            links
-        );
-        card.append(bottom);
-        if (service.error) {
-            const note = el('div', 'svc-sub', service.error);
-            note.title = service.error;
-            card.append(note);
-        }
+        controls.append(up, down, design, edit, remove);
+        card.append(controls);
+
+        card.addEventListener('dragstart', event => {
+            if (!layoutMode) {
+                event.preventDefault();
+                return;
+            }
+            draggedServiceId = service.id;
+            card.classList.add('is-dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', String(service.id));
+        });
+        card.addEventListener('dragover', event => {
+            if (!layoutMode || draggedServiceId === null || draggedServiceId === service.id) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            card.classList.add('drop-target');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+        card.addEventListener('drop', event => {
+            event.preventDefault();
+            card.classList.remove('drop-target');
+            if (draggedServiceId !== null) {
+                const bounds = card.getBoundingClientRect();
+                moveTileRelative(draggedServiceId, service.id, event.clientY > bounds.top + bounds.height / 2);
+            }
+        });
+        card.addEventListener('dragend', () => {
+            draggedServiceId = null;
+            card.classList.remove('is-dragging');
+            document.querySelectorAll('.service-tile').forEach(tile => tile.classList.remove('drop-target'));
+        });
         serviceList.append(card);
     }
 
@@ -208,6 +318,7 @@ function showEmpty(parent, text) {
 async function refresh() {
     try {
         data = await api('/api/dashboard');
+        if (!$('tileStylesheet')) refreshTileStyles();
         $('authScreen').hidden = true;
         $('appShell').hidden = false;
         render();
@@ -301,6 +412,46 @@ $('addButton').onclick = () => openDialog();
 $('closeDialog').onclick = $('cancelDialog').onclick = () => $('serviceDialog').close();
 $('statusFilter').onchange = render;
 $('repoSearch').oninput = render;
+$('layoutButton').onclick = () => {
+    layoutMode = !layoutMode;
+    if (layoutMode) $('statusFilter').value = 'all';
+    render();
+};
+$('closeTileDialog').onclick = $('cancelTileDialog').onclick = () => $('tileDialog').close();
+$('tileForm').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const settings = {
+        width: Number(form.elements.width.value),
+        height: Number(form.elements.height.value),
+        color: form.elements.color.value,
+        shape: form.elements.shape.value
+    };
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    $('tileFormError').textContent = '';
+    try {
+        await api(`/api/services/${editingTileId}/tile`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        });
+        const service = data.services.find(item => item.id === editingTileId);
+        Object.assign(service, {
+            tile_width: settings.width,
+            tile_height: settings.height,
+            tile_color: settings.color,
+            tile_shape: settings.shape
+        });
+        $('tileDialog').close();
+        refreshTileStyles();
+        render();
+    } catch (error) {
+        $('tileFormError').textContent = error.message;
+    } finally {
+        submit.disabled = false;
+    }
+};
 $('checkType').onchange = () => {
     const form = $('serviceForm');
     const current = form.elements.check_url.value;

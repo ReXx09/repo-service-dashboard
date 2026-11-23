@@ -7,6 +7,7 @@
   <title>Repository Control Center</title>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/auth.css">
+  <link rel="stylesheet" href="/static/tiles.css">
 </head>
 <body>
 <div id="authScreen" class="auth-screen" hidden>
@@ -78,9 +79,13 @@
       </section>
       <section id="services" class="panel">
         <div class="panel-head">
-          <div><h2>Live Services <span id="serviceBadge" class="count-badge">0</span></h2><p>Healthchecks, IP-Adressen und direkte Links</p></div>
-          <div class="row"><select id="statusFilter" aria-label="Statusfilter"><option value="all">Alle Status</option><option value="online">Online</option><option value="offline">Offline</option><option value="degraded">Eingeschränkt</option><option value="pending">Noch nicht geprüft</option></select></div>
+          <div><h2>Service-Kacheln <span id="serviceBadge" class="count-badge">0</span></h2><p>Ziehe deine Produktiv-Dashboards ins passende Grid-Layout</p></div>
+          <div class="tile-toolbar">
+            <button id="layoutButton" class="btn secondary" type="button">Layout anpassen</button>
+            <select id="statusFilter" aria-label="Statusfilter"><option value="all">Alle Status</option><option value="online">Online</option><option value="offline">Offline</option><option value="degraded">Eingeschränkt</option><option value="pending">Noch nicht geprüft</option></select>
+          </div>
         </div>
+        <p id="layoutHint" class="layout-hint" hidden>Ziehe Kacheln zum Sortieren oder nutze ↑/↓. Über „Design“ passt du Größe, Farbe und Form an.</p>
         <div id="serviceList" class="service-grid"></div>
       </section>
       <section id="repos" class="panel">
@@ -107,6 +112,27 @@
       <div id="formError" class="form-error" role="alert"></div>
     </div>
     <div class="dialog-actions"><button type="button" id="cancelDialog" class="btn secondary">Abbrechen</button><button class="btn primary" type="submit">Speichern</button></div>
+  </form>
+</dialog>
+<dialog id="tileDialog">
+  <form id="tileForm">
+    <div class="dialog-head"><h2>Kachel gestalten</h2><button type="button" id="closeTileDialog" class="icon-btn">✕</button></div>
+    <div class="dialog-body">
+      <label>Breite im Grid
+        <select name="width"><option value="1">1 Feld</option><option value="2">2 Felder</option><option value="3">3 Felder</option><option value="4">4 Felder</option></select>
+      </label>
+      <label>Höhe im Grid
+        <select name="height"><option value="1">1 Feld</option><option value="2">2 Felder</option><option value="3">3 Felder</option></select>
+      </label>
+      <label>Farbe
+        <input name="color" type="color" value="#7254ce">
+      </label>
+      <label>Form
+        <select name="shape"><option value="rounded">Abgerundet</option><option value="square">Eckig</option><option value="pill">Pillenform</option></select>
+      </label>
+      <div id="tileFormError" class="form-error" role="alert"></div>
+    </div>
+    <div class="dialog-actions"><button type="button" id="cancelTileDialog" class="btn secondary">Abbrechen</button><button class="btn primary" type="submit">Übernehmen</button></div>
   </form>
 </dialog>
 <script src="/static/app.js" defer></script>

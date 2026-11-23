@@ -54,6 +54,10 @@ Dashboard → **+ Service hinzufügen**:
 
 HTTP 2xx–4xx gilt als erreichbar (z. B. Login mit HTTP 401), HTTP 5xx als gestört, Verbindungsfehler als offline. Redirects werden nicht automatisch verfolgt, aber HTTP-3xx zählt als erreichbar. Checks laufen auf dem **Server**, nicht im Browser. Standardintervall: 60 Sekunden. Laufzeit und Fehler werden angezeigt. Services können hinzugefügt, geändert und gelöscht werden.
 
+## Service-Kacheln
+
+Jeder Service erscheint als eigene Dashboard-Kachel und öffnet beim Anklicken seine gespeicherte `url` in einem neuen Tab. Über **Layout anpassen** lassen sich Kacheln per Drag-and-drop oder ↑/↓ sortieren. **Design** ändert Grid-Breite/-Höhe, Farbe und Form. Anordnung und Design werden im SQLite-Volume gespeichert.
+
 ## Sicherheit / Grenzen
 
 - Die App ist für **Einzelbetreiber oder ein kleines vertrauenswürdiges Team** konzipiert. Keine Benutzerverwaltung, keine Rollen/Rechte pro Repository, kein SSO und keine Audit-Logs.
@@ -88,7 +92,7 @@ Beim ersten lokalen Aufruf wird das Admin-Konto im Browser eingerichtet.
 
 ## API
 
-`GET /api/auth/status` und `POST /api/auth/setup`, `/api/auth/login`, `/api/auth/logout` verwalten die einmalige Ersteinrichtung und Anmeldung. Die Dashboard-API (`GET /api/dashboard`, `POST /api/sync`, `POST /api/check`, `POST /api/services`, `PUT /api/services/{id}`, `DELETE /api/services/{id}`) benötigt eine gültige Sitzung. Schreibende Anfragen aus dem Frontend senden `X-Dashboard-Request: 1`.
+`GET /api/auth/status` und `POST /api/auth/setup`, `/api/auth/login`, `/api/auth/logout` verwalten die einmalige Ersteinrichtung und Anmeldung. Die geschützte Dashboard-API umfasst Services und Kacheln; Schreibanfragen senden `X-Dashboard-Request: 1`.
 
 ## Projektstruktur
 
@@ -97,6 +101,7 @@ app/main.py             FastAPI, SQLite, GitHub API, Monitoring
 app/static/index.html   Dashboard-Oberfläche
 app/static/styles.css   Responsive Dark-Mode-Design
 app/static/auth.css     Ersteinrichtung und Login
+app/static/tiles.css    Grid-Kacheln und Layout-Editor
 app/static/app.js       Suchfilter, API, Formulare und Live-Refresh
 compose.yaml            Docker Compose mit konfigurierbarer Host-IP-Bindung
 Dockerfile              Unprivilegierter Python-Container

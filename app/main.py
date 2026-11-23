@@ -42,6 +42,7 @@ def connection() -> Generator[sqlite3.Connection, None, None]:
     con = sqlite3.connect(DB_PATH, timeout=15)
     con.row_factory = sqlite3.Row
     try:
+        con.execute("PRAGMA foreign_keys = ON")
         yield con
         con.commit()
     except Exception:
@@ -57,6 +58,8 @@ def init_db():
         con.execute("CREATE TABLE IF NOT EXISTS repos (full_name TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, url TEXT NOT NULL, branch TEXT, language TEXT, visibility TEXT, pushed_at TEXT, archived INTEGER, last_seen TEXT)")
         con.execute("CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, repo_full_name TEXT, url TEXT NOT NULL, check_url TEXT NOT NULL, check_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', latency_ms INTEGER, last_checked TEXT, error TEXT)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_service_repo ON services(repo_full_name)")
+        con.execute("CREATE TABLE IF NOT EXISTS service_tiles (service_id INTEGER PRIMARY KEY REFERENCES services(id) ON DELETE CASCADE, position INTEGER NOT NULL, width INTEGER NOT NULL DEFAULT 1 CHECK(width BETWEEN 1 AND 4), height INTEGER NOT NULL DEFAULT 1 CHECK(height BETWEEN 1 AND 3), color TEXT NOT NULL DEFAULT '#7254ce', shape TEXT NOT NULL DEFAULT 'rounded' CHECK(shape IN ('rounded','square','pill')))")
+        con.execute("INSERT OR IGNORE INTO service_tiles(service_id,position) SELECT id,id FROM services")
         con.execute("CREATE TABLE IF NOT EXISTS admin_user (id INTEGER PRIMARY KEY CHECK(id = 1), username TEXT NOT NULL UNIQUE, password_salt BLOB NOT NULL, password_hash BLOB NOT NULL, created_at TEXT NOT NULL)")
         con.execute("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_auth_session_expiry ON auth_sessions(expires_at)")
@@ -133,6 +136,17 @@ def require_auth(request: Request):
 class AuthCredentials(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=12, max_length=1024)
+
+
+class TileSettingsIn(BaseModel):
+    width: int = Field(ge=1, le=4)
+    height: int = Field(ge=1, le=3)
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    shape: str = Field(pattern=r"^(rounded|square|pill)$")
+
+
+class TileOrderIn(BaseModel):
+    service_ids: list[int] = Field(max_length=1000)
 
 
 def validate_url(value: str, *, check: bool = False) -> str:
@@ -293,7 +307,7 @@ async def home():
 
 @app.get("/static/{filename}")
 async def static_file(filename: str):
-    if filename not in {"app.js", "styles.css", "auth.css"}:
+    if filename not in {"app.js", "styles.css", "auth.css", "tiles.css"}:
         raise HTTPException(404)
     return FileResponse(Path(__file__).parent / "static" / filename)
 
@@ -385,8 +399,23 @@ async def logout(request: Request):
 async def dashboard(_: None = Depends(require_auth)):
     with connection() as con:
         repos = [dict(r) for r in con.execute("SELECT * FROM repos ORDER BY lower(full_name)")]
-        services = [dict(r) for r in con.execute("SELECT * FROM services ORDER BY lower(name)")]
+        services = [dict(r) for r in con.execute("""SELECT s.*, COALESCE(t.position,s.id) AS tile_position,
+            COALESCE(t.width,1) AS tile_width, COALESCE(t.height,1) AS tile_height,
+            COALESCE(t.color,'#7254ce') AS tile_color, COALESCE(t.shape,'rounded') AS tile_shape
+            FROM services s LEFT JOIN service_tiles t ON t.service_id=s.id
+            ORDER BY COALESCE(t.position,s.id), lower(s.name)""")]
     return {"repos":repos,"services":services,"meta":state,"config":{"sync_seconds":SYNC_SECS,"monitor_seconds":MONITOR_SECS}}
+
+
+@app.get("/api/tiles.css")
+async def tile_styles(_: None = Depends(require_auth)):
+    with connection() as con:
+        rows = con.execute("SELECT service_id,color FROM service_tiles ORDER BY service_id").fetchall()
+    rules = []
+    for row in rows:
+        color = row["color"] if re.fullmatch(r"#[0-9A-Fa-f]{6}", row["color"]) else "#7254ce"
+        rules.append(f"#service-tile-{row['service_id']}{{--tile-color:{color};}}")
+    return Response("\n".join(rules), media_type="text/css")
 
 
 @app.post("/api/sync")
@@ -411,6 +440,38 @@ def check_origin(request: Request):
         raise HTTPException(403, "Fehlender API-Header")
 
 
+@app.put("/api/tiles/order")
+async def update_tile_order(order: TileOrderIn, request: Request, _: None = Depends(require_auth)):
+    check_origin(request)
+    if len(order.service_ids) != len(set(order.service_ids)):
+        raise HTTPException(422, "Jeder Service darf nur einmal im Grid vorkommen")
+    with connection() as con:
+        current_ids = {row["id"] for row in con.execute("SELECT id FROM services")}
+        if set(order.service_ids) != current_ids:
+            raise HTTPException(422, "Die Kachelliste entspricht nicht den vorhandenen Services")
+        con.executemany(
+            "UPDATE service_tiles SET position=? WHERE service_id=?",
+            ((position, service_id) for position, service_id in enumerate(order.service_ids)),
+        )
+    return {"ok": True}
+
+
+@app.put("/api/services/{service_id}/tile")
+async def update_tile(service_id: int, tile: TileSettingsIn, request: Request, _: None = Depends(require_auth)):
+    check_origin(request)
+    with connection() as con:
+        if con.execute("SELECT 1 FROM services WHERE id=?", (service_id,)).fetchone() is None:
+            raise HTTPException(404, "Service nicht gefunden")
+        con.execute(
+            """INSERT INTO service_tiles(service_id,position,width,height,color,shape)
+               VALUES(?,COALESCE((SELECT MAX(position)+1 FROM service_tiles),0),?,?,?,?)
+               ON CONFLICT(service_id) DO UPDATE SET
+               width=excluded.width,height=excluded.height,color=excluded.color,shape=excluded.shape""",
+            (service_id, tile.width, tile.height, tile.color, tile.shape),
+        )
+    return {"ok": True}
+
+
 @app.post("/api/check")
 async def check_now(request: Request, _: None = Depends(require_auth)):
     check_origin(request)
@@ -428,6 +489,8 @@ async def add_service(service: ServiceIn, request: Request, _: None = Depends(re
     with connection() as con:
         cursor = con.execute("INSERT INTO services(name,repo_full_name,url,check_url,check_type) VALUES(?,?,?,?,?)", (name,repo,url,check_url,check_type))
         service_id = cursor.lastrowid
+        position = con.execute("SELECT COALESCE(MAX(position)+1,0) FROM service_tiles").fetchone()[0]
+        con.execute("INSERT INTO service_tiles(service_id,position) VALUES(?,?)", (service_id, position))
     return {"id":service_id}
 
 
