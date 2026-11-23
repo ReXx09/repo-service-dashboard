@@ -4,19 +4,20 @@ Eine selbst gehostete, deutschsprachige Dashboard-Anwendung mit **GitHub-Synchro
 
 ## Schnellstart (Docker Compose)
 
-Voraussetzungen: Docker Engine mit `docker compose`; ein GitHub Personal Access Token; für sicheren Fernzugriff optional Tailscale auf dem Dashboard-Host.
+Voraussetzungen: Docker Engine mit `docker compose`; optional ein GitHub Personal Access Token; für sicheren Fernzugriff optional Tailscale auf dem Dashboard-Host.
 
 ```bash
 cp .env.example .env
-# .env bearbeiten: DASHBOARD_PASSWORD durch ein langes zufälliges Passwort ersetzen
-# GITHUB_TOKEN ergänzen (kein Token im Git-Repository speichern!)
+# Optional: GITHUB_TOKEN in .env ergänzen (niemals im Git-Repository speichern)
 docker compose pull
 docker compose up -d
 ```
 
 Standardmäßig ist das Dashboard nur lokal am Docker-Host unter <http://127.0.0.1:8080> erreichbar. Für Zugriff im Heimnetz setze `DASHBOARD_BIND_IP` in `.env` auf die feste LAN-IP des Docker-Hosts (bei Unraid z. B. `192.168.1.20`) und öffne `http://<Unraid-LAN-IP>:8080`. Der Port wird dann nur an diese Netzwerkschnittstelle gebunden. Leite Port 8080 nicht im Router ins Internet weiter.
 
-**Wichtig:** Im Heimnetz ist die Verbindung weiterhin unverschlüsseltes HTTP; verwende sie nur in einem vertrauenswürdigen LAN. Für Zugriff über unsichere Netzwerke nutze HTTPS, etwa mit Tailscale Serve. HTTP Basic Authentication über unverschlüsseltes HTTP nicht öffentlich freigeben!
+Beim ersten Browseraufruf richtest du das einmalige Admin-Konto ein. Wähle einen Benutzernamen und ein Passwort mit mindestens 12 Zeichen. Es wird ein Passwort-Hash gespeichert; danach ist keine offene Registrierung möglich.
+
+**Wichtig:** Im Heimnetz ist die Verbindung weiterhin unverschlüsseltes HTTP; verwende sie nur in einem vertrauenswürdigen LAN. Für Zugriff über unsichere Netzwerke nutze HTTPS, etwa mit Tailscale Serve. Die Anmeldedaten niemals unverschlüsselt öffentlich übertragen.
 
 ## Dockge / Container-Image
 
@@ -56,7 +57,7 @@ HTTP 2xx–4xx gilt als erreichbar (z. B. Login mit HTTP 401), HTTP 5xx als gest
 ## Sicherheit / Grenzen
 
 - Die App ist für **Einzelbetreiber oder ein kleines vertrauenswürdiges Team** konzipiert. Keine Benutzerverwaltung, keine Rollen/Rechte pro Repository, kein SSO und keine Audit-Logs.
-- Authentifizierung erfolgt über HTTP Basic. Verwende ein starkes Passwort und nur HTTPS/Tailscale für Remote-Zugriff. Für eine öffentliche Mehrbenutzerinstanz wäre zusätzlich ein professioneller Identity-/Reverse-Proxy mit Rate-Limit sinnvoll.
+- Das Admin-Passwort wird mit PBKDF2 gehasht; Sitzungen laufen über HttpOnly-/SameSite-Cookies ab. Nach der einmaligen Ersteinrichtung ist keine öffentliche Konto-Erstellung möglich. Für Remote-Zugriff HTTPS/Tailscale verwenden.
 - Angemeldete Administratoren dürfen frei konfigurierbare Monitoring-Ziele eingeben. Dadurch kann der Server Anfragen an interne Hosts senden. Kein untrusted Benutzerzugriff auf die Admin-Oberfläche erlauben (SSRF-Risiko).
 - SQLite liegt in einem persistenten Docker-Volume. Backup: `docker compose stop` und das Volume sichern; nicht nur den Container sichern.
 - Ein Repository ohne zugeordneten Dienst hat keinen Online-/Offline-Status. Ein Dienst kann ohne Repo existieren.
@@ -79,15 +80,15 @@ Ohne Docker lokal entwickeln:
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export DATABASE_PATH=./dashboard.sqlite3
-export DASHBOARD_USER=admin
-export DASHBOARD_PASSWORD='ein-wirklich-langes-passwort'
 export GITHUB_TOKEN='github_pat_...'
 uvicorn app.main:app --host 127.0.0.1 --port 8080
 ```
 
+Beim ersten lokalen Aufruf wird das Admin-Konto im Browser eingerichtet.
+
 ## API
 
-`GET /api/dashboard`, `POST /api/sync`, `POST /api/check`, `POST /api/services`, `PUT /api/services/{id}`, `DELETE /api/services/{id}`. Alle API-Routen sind geschützt. Schreibende Anfragen aus dem Frontend senden `X-Dashboard-Request: 1`.
+`GET /api/auth/status` und `POST /api/auth/setup`, `/api/auth/login`, `/api/auth/logout` verwalten die einmalige Ersteinrichtung und Anmeldung. Die Dashboard-API (`GET /api/dashboard`, `POST /api/sync`, `POST /api/check`, `POST /api/services`, `PUT /api/services/{id}`, `DELETE /api/services/{id}`) benötigt eine gültige Sitzung. Schreibende Anfragen aus dem Frontend senden `X-Dashboard-Request: 1`.
 
 ## Projektstruktur
 
@@ -95,6 +96,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8080
 app/main.py             FastAPI, SQLite, GitHub API, Monitoring
 app/static/index.html   Dashboard-Oberfläche
 app/static/styles.css   Responsive Dark-Mode-Design
+app/static/auth.css     Ersteinrichtung und Login
 app/static/app.js       Suchfilter, API, Formulare und Live-Refresh
 compose.yaml            Docker Compose mit konfigurierbarer Host-IP-Bindung
 Dockerfile              Unprivilegierter Python-Container

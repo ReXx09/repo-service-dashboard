@@ -1,30 +1,34 @@
 """Repo & Service Control Center. No third party JS, telemetry or tracking."""
 import asyncio
+import hashlib
 import hmac
 import ipaddress
 import json
 import os
 import re
+import secrets
 import sqlite3
 import time
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from collections.abc import Generator
+from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 DB_PATH = os.environ.get("DATABASE_PATH", "/data/dashboard.sqlite3")
 GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-USER = os.environ.get("DASHBOARD_USER", "")
-PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 SYNC_SECS = max(60, int(os.environ.get("GITHUB_SYNC_SECONDS", "900")))
 MONITOR_SECS = max(15, int(os.environ.get("MONITOR_SECONDS", "60")))
-security = HTTPBasic(auto_error=False)
+SESSION_COOKIE = "dashboard_session"
+SESSION_TTL_SECONDS = 60 * 60 * 24 * 14
+PASSWORD_ITERATIONS = 600_000
+LOGIN_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_ATTEMPTS = 8
 state = {"github_sync": None, "github_error": None, "monitor": None, "monitor_error": None}
 work_lock = asyncio.Lock()
 
@@ -33,10 +37,18 @@ def utcnow():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def connection():
+@contextmanager
+def connection() -> Generator[sqlite3.Connection, None, None]:
     con = sqlite3.connect(DB_PATH, timeout=15)
     con.row_factory = sqlite3.Row
-    return con
+    try:
+        yield con
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
 
 
 def init_db():
@@ -45,13 +57,82 @@ def init_db():
         con.execute("CREATE TABLE IF NOT EXISTS repos (full_name TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, url TEXT NOT NULL, branch TEXT, language TEXT, visibility TEXT, pushed_at TEXT, archived INTEGER, last_seen TEXT)")
         con.execute("CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, repo_full_name TEXT, url TEXT NOT NULL, check_url TEXT NOT NULL, check_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', latency_ms INTEGER, last_checked TEXT, error TEXT)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_service_repo ON services(repo_full_name)")
+        con.execute("CREATE TABLE IF NOT EXISTS admin_user (id INTEGER PRIMARY KEY CHECK(id = 1), username TEXT NOT NULL UNIQUE, password_salt BLOB NOT NULL, password_hash BLOB NOT NULL, created_at TEXT NOT NULL)")
+        con.execute("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_auth_session_expiry ON auth_sessions(expires_at)")
+        con.execute("CREATE TABLE IF NOT EXISTS auth_failures (client_ip TEXT NOT NULL, attempted_at TEXT NOT NULL)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_auth_failure_ip_time ON auth_failures(client_ip,attempted_at)")
 
 
-def require_auth(credentials: HTTPBasicCredentials | None = Depends(security)):
-    if not USER or not PASSWORD or PASSWORD == "HIER_EIN_LANGES_ZUFAELLIGES_PASSWORT_EINTRAGEN":
-        raise HTTPException(status_code=503, detail="Zuerst DASHBOARD_USER und DASHBOARD_PASSWORD sicher konfigurieren")
-    if not credentials or not (hmac.compare_digest(credentials.username.encode(), USER.encode()) and hmac.compare_digest(credentials.password.encode(), PASSWORD.encode())):
-        raise HTTPException(status_code=401, detail="Anmeldung erforderlich", headers={"WWW-Authenticate": 'Basic realm="Repository Dashboard"'})
+def admin_is_configured() -> bool:
+    with connection() as con:
+        return con.execute("SELECT 1 FROM admin_user WHERE id=1").fetchone() is not None
+
+
+def request_is_authenticated(request: Request) -> bool:
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return False
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    with connection() as con:
+        row = con.execute(
+            "SELECT expires_at FROM auth_sessions WHERE token_hash=?",
+            (token_hash,),
+        ).fetchone()
+    return row is not None and row["expires_at"] > utcnow()
+
+
+def issue_session(con: sqlite3.Connection, request: Request, response: Response) -> None:
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS)).isoformat(timespec="seconds")
+    con.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (utcnow(),))
+    con.execute(
+        "INSERT INTO auth_sessions(token_hash,expires_at) VALUES(?,?)",
+        (hashlib.sha256(token.encode("utf-8")).hexdigest(), expires_at),
+    )
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+        path="/",
+    )
+
+
+def request_client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_login_limit(client_ip: str) -> None:
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=LOGIN_WINDOW_SECONDS)).isoformat(timespec="seconds")
+    with connection() as con:
+        con.execute("DELETE FROM auth_failures WHERE attempted_at <= ?", (cutoff,))
+        attempts = con.execute(
+            "SELECT COUNT(*) FROM auth_failures WHERE client_ip=? AND attempted_at>?",
+            (client_ip, cutoff),
+        ).fetchone()[0]
+    if attempts >= LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(429, "Zu viele fehlgeschlagene Anmeldungen. Bitte später erneut versuchen.")
+
+
+def record_login_failure(client_ip: str) -> None:
+    with connection() as con:
+        con.execute(
+            "INSERT INTO auth_failures(client_ip,attempted_at) VALUES(?,?)",
+            (client_ip, utcnow()),
+        )
+
+
+def require_auth(request: Request):
+    if not request_is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Anmeldung erforderlich")
+
+
+class AuthCredentials(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    password: str = Field(min_length=12, max_length=1024)
 
 
 def validate_url(value: str, *, check: bool = False) -> str:
@@ -206,15 +287,98 @@ async def browser_security(request: Request, call_next):
 
 
 @app.get("/")
-async def home(_: None = Depends(require_auth)):
+async def home():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
 @app.get("/static/{filename}")
-async def static_file(filename: str, _: None = Depends(require_auth)):
-    if filename not in {"app.js", "styles.css"}:
+async def static_file(filename: str):
+    if filename not in {"app.js", "styles.css", "auth.css"}:
         raise HTTPException(404)
     return FileResponse(Path(__file__).parent / "static" / filename)
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    configured = admin_is_configured()
+    return {
+        "setup_required": not configured,
+        "authenticated": configured and request_is_authenticated(request),
+    }
+
+
+@app.post("/api/auth/setup")
+async def setup_admin(credentials: AuthCredentials, request: Request):
+    check_origin(request)
+    salt = secrets.token_bytes(16)
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        credentials.password.encode("utf-8"),
+        salt,
+        PASSWORD_ITERATIONS,
+    )
+    response = JSONResponse({"ok": True})
+    try:
+        with connection() as con:
+            con.execute(
+                "INSERT INTO admin_user(id,username,password_salt,password_hash,created_at) VALUES(1,?,?,?,?)",
+                (credentials.username.casefold(), salt, password_hash, utcnow()),
+            )
+            issue_session(con, request, response)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "Die Ersteinrichtung wurde bereits abgeschlossen") from exc
+    return response
+
+
+@app.post("/api/auth/login")
+async def login(credentials: AuthCredentials, request: Request):
+    check_origin(request)
+    client_ip = request_client_ip(request)
+    enforce_login_limit(client_ip)
+    with connection() as con:
+        admin = con.execute(
+            "SELECT username,password_salt,password_hash FROM admin_user WHERE id=1"
+        ).fetchone()
+    if admin is None:
+        raise HTTPException(409, "Bitte zuerst das Admin-Konto einrichten")
+    candidate_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        credentials.password.encode("utf-8"),
+        admin["password_salt"],
+        PASSWORD_ITERATIONS,
+    )
+    username_matches = hmac.compare_digest(
+        credentials.username.casefold().encode("utf-8"),
+        admin["username"].encode("utf-8"),
+    )
+    password_matches = hmac.compare_digest(candidate_hash, admin["password_hash"])
+    if not (username_matches and password_matches):
+        record_login_failure(client_ip)
+        raise HTTPException(401, "Benutzername oder Passwort ist falsch")
+    response = JSONResponse({"ok": True})
+    with connection() as con:
+        con.execute("DELETE FROM auth_failures WHERE client_ip=?", (client_ip,))
+        issue_session(con, request, response)
+    return response
+
+
+@app.post("/api/auth/logout", status_code=204)
+async def logout(request: Request):
+    check_origin(request)
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with connection() as con:
+            con.execute("DELETE FROM auth_sessions WHERE token_hash=?", (token_hash,))
+    response = Response(status_code=204)
+    response.delete_cookie(
+        key=SESSION_COOKIE,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+        path="/",
+    )
+    return response
 
 
 @app.get("/api/dashboard")

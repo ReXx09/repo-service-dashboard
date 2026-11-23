@@ -1,8 +1,114 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Repository Control Center</title><link rel="stylesheet" href="/static/styles.css"></head><body>
-<div class="shell"><aside class="sidebar"><div class="brand"><span class="brandlogo">◈</span><div>REPO<span class="accent">PULSE</span><small>CONTROL CENTER</small></div></div><div class="nav-label">WORKSPACE</div><a class="nav active" href="#overview">▦ &nbsp; Übersicht</a><a class="nav" href="#repos">⌘ &nbsp; Repositories</a><a class="nav" href="#services">◉ &nbsp; Services</a><div class="sidebar-bottom"><div class="online-indicator"><span class="pulse-dot"></span> Monitoring aktiv</div><small>Private Infrastruktur · v1.0</small></div></aside>
-<main class="main"><header class="topbar"><div class="breadcrumbs">WORKSPACE <span>/</span> OVERVIEW</div><div class="topright"><span id="updated">Noch nicht synchronisiert</span><span class="avatar">RC</span></div></header><div class="content"><div class="heading"><div><div class="eyebrow">DEINE INFRASTRUKTUR AUF EINEN BLICK</div><h1>Control Center<span class="accent">.</span></h1><p>Alle GitHub-Repositories und laufenden Dienste an einem Ort.</p></div><div class="actions"><button id="syncButton" class="btn secondary">↻ GitHub synchronisieren</button><button id="checkButton" class="btn secondary">◉ Jetzt prüfen</button><button id="addButton" class="btn primary">+ Service hinzufügen</button></div></div>
-<div id="alerts" class="alerts"></div><section id="overview" class="stats"><div class="stat"><div class="stat-label">REPOSITORIES <span>⌘</span></div><strong id="repoCount">—</strong><span class="stat-foot">Auf GitHub gefunden</span></div><div class="stat"><div class="stat-label">SERVICES <span>◈</span></div><strong id="serviceCount">—</strong><span class="stat-foot">Aktiv konfiguriert</span></div><div class="stat"><div class="stat-label">ONLINE <span class="green">●</span></div><strong id="onlineCount">—</strong><span class="stat-foot">Erreichbare Endpunkte</span></div><div class="stat"><div class="stat-label">PROBLEME <span class="red">●</span></div><strong id="offlineCount">—</strong><span class="stat-foot">Offline / Eingeschränkt</span></div></section>
-<section id="services" class="panel"><div class="panel-head"><div><h2>Live Services <span id="serviceBadge" class="count-badge">0</span></h2><p>Healthchecks, IP-Adressen und direkte Links</p></div><div class="row"><select id="statusFilter" aria-label="Statusfilter"><option value="all">Alle Status</option><option value="online">Online</option><option value="offline">Offline</option><option value="degraded">Eingeschränkt</option><option value="pending">Noch nicht geprüft</option></select></div></div><div id="serviceList" class="service-grid"></div></section>
-<section id="repos" class="panel"><div class="panel-head"><div><h2>GitHub Repositories <span id="repoBadge" class="count-badge">0</span></h2><p>Automatisch aus deinem Account synchronisiert</p></div><input id="repoSearch" class="search" type="search" placeholder="⌕  Repository suchen ..." aria-label="Repository suchen"></div><div id="repoList" class="repo-list"></div></section><div class="footer">RepoPulse · Self-hosted Dashboard <span id="lastMonitor"></span></div></div></main></div>
-<dialog id="serviceDialog"><form id="serviceForm"><div class="dialog-head"><h2 id="dialogTitle">Service hinzufügen</h2><button type="button" id="closeDialog" class="icon-btn">✕</button></div><div class="dialog-body"><label>Name<input name="name" maxlength="100" required placeholder="z. B. Nextcloud"></label><label>Repository (optional)<select name="repo_full_name" id="repoSelect"><option value="">Ohne Zuordnung</option></select></label><label>Öffnen über IP oder Domain<input name="url" type="url" required placeholder="http://192.168.1.20:3000"></label><label>Healthcheck-Adresse<input name="check_url" required placeholder="http://192.168.1.20:3000/health"></label><label>Prüfart<select name="check_type" id="checkType"><option value="http">HTTP / HTTPS</option><option value="tcp">TCP-Port</option></select></label><p class="hint">HTTP: 2xx–4xx = erreichbar, 5xx = eingeschränkt. TCP: tcp://host:port. Interne Adressen müssen vom Dashboard-Server aus erreichbar sein.</p><div id="formError" class="form-error" role="alert"></div></div><div class="dialog-actions"><button type="button" id="cancelDialog" class="btn secondary">Abbrechen</button><button class="btn primary" type="submit">Speichern</button></div></form></dialog>
-<script src="/static/app.js" defer></script></body></html>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Repository Control Center</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+<div id="authScreen" class="auth-screen" hidden>
+  <section class="auth-card" aria-labelledby="authTitle">
+    <div class="brand">
+      <span class="brandlogo">◈</span>
+      <div>REPO<span class="accent">PULSE</span><small>CONTROL CENTER</small></div>
+    </div>
+    <div id="authEyebrow" class="eyebrow">ERSTEINRICHTUNG</div>
+    <h1 id="authTitle">Willkommen<span class="accent">.</span></h1>
+    <p id="authDescription">Lege das einmalige Admin-Konto für dein Dashboard an.</p>
+    <form id="authForm">
+      <label for="authUsername">Benutzername
+        <input id="authUsername" name="username" autocomplete="username" minlength="3" maxlength="64" required>
+      </label>
+      <label for="authPassword">Passwort
+        <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required>
+      </label>
+      <label id="confirmPasswordWrap" for="authConfirmPassword">
+        Passwort bestätigen
+        <input id="authConfirmPassword" name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="1024">
+      </label>
+      <div id="authError" class="form-error" role="alert"></div>
+      <button id="authSubmit" class="btn primary" type="submit">Admin-Konto erstellen</button>
+    </form>
+    <p class="auth-note">Das Passwort wird geschützt gespeichert. Nach der Einrichtung ist keine öffentliche Registrierung möglich.</p>
+  </section>
+</div>
+<div class="shell" id="appShell" hidden>
+  <aside class="sidebar">
+    <div class="brand"><span class="brandlogo">◈</span><div>REPO<span class="accent">PULSE</span><small>CONTROL CENTER</small></div></div>
+    <div class="nav-label">WORKSPACE</div>
+    <a class="nav active" href="#overview">▦ &nbsp; Übersicht</a>
+    <a class="nav" href="#repos">⌘ &nbsp; Repositories</a>
+    <a class="nav" href="#services">◉ &nbsp; Services</a>
+    <div class="sidebar-bottom">
+      <div class="online-indicator"><span class="pulse-dot"></span> Monitoring aktiv</div>
+      <small>Private Infrastruktur · v1.0</small>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="breadcrumbs">WORKSPACE <span>/</span> OVERVIEW</div>
+      <div class="topright">
+        <span id="updated">Noch nicht synchronisiert</span>
+        <button id="logoutButton" class="mini" type="button">Abmelden</button>
+        <span class="avatar">RC</span>
+      </div>
+    </header>
+    <div class="content">
+      <div class="heading">
+        <div>
+          <div class="eyebrow">DEINE INFRASTRUKTUR AUF EINEN BLICK</div>
+          <h1>Control Center<span class="accent">.</span></h1>
+          <p>Alle GitHub-Repositories und laufenden Dienste an einem Ort.</p>
+        </div>
+        <div class="actions">
+          <button id="syncButton" class="btn secondary">↻ GitHub synchronisieren</button>
+          <button id="checkButton" class="btn secondary">◉ Jetzt prüfen</button>
+          <button id="addButton" class="btn primary">+ Service hinzufügen</button>
+        </div>
+      </div>
+      <div id="alerts" class="alerts"></div>
+      <section id="overview" class="stats">
+        <div class="stat"><div class="stat-label">REPOSITORIES <span>⌘</span></div><strong id="repoCount">—</strong><span class="stat-foot">Auf GitHub gefunden</span></div>
+        <div class="stat"><div class="stat-label">SERVICES <span>◈</span></div><strong id="serviceCount">—</strong><span class="stat-foot">Aktiv konfiguriert</span></div>
+        <div class="stat"><div class="stat-label">ONLINE <span class="green">●</span></div><strong id="onlineCount">—</strong><span class="stat-foot">Erreichbare Endpunkte</span></div>
+        <div class="stat"><div class="stat-label">PROBLEME <span class="red">●</span></div><strong id="offlineCount">—</strong><span class="stat-foot">Offline / Eingeschränkt</span></div>
+      </section>
+      <section id="services" class="panel">
+        <div class="panel-head">
+          <div><h2>Live Services <span id="serviceBadge" class="count-badge">0</span></h2><p>Healthchecks, IP-Adressen und direkte Links</p></div>
+          <div class="row"><select id="statusFilter" aria-label="Statusfilter"><option value="all">Alle Status</option><option value="online">Online</option><option value="offline">Offline</option><option value="degraded">Eingeschränkt</option><option value="pending">Noch nicht geprüft</option></select></div>
+        </div>
+        <div id="serviceList" class="service-grid"></div>
+      </section>
+      <section id="repos" class="panel">
+        <div class="panel-head">
+          <div><h2>GitHub Repositories <span id="repoBadge" class="count-badge">0</span></h2><p>Automatisch aus deinem Account synchronisiert</p></div>
+          <input id="repoSearch" class="search" type="search" placeholder="⌕  Repository suchen ..." aria-label="Repository suchen">
+        </div>
+        <div id="repoList" class="repo-list"></div>
+      </section>
+      <div class="footer">RepoPulse · Self-hosted Dashboard <span id="lastMonitor"></span></div>
+    </div>
+  </main>
+</div>
+<dialog id="serviceDialog">
+  <form id="serviceForm">
+    <div class="dialog-head"><h2 id="dialogTitle">Service hinzufügen</h2><button type="button" id="closeDialog" class="icon-btn">✕</button></div>
+    <div class="dialog-body">
+      <label>Name<input name="name" maxlength="100" required placeholder="z. B. Nextcloud"></label>
+      <label>Repository (optional)<select name="repo_full_name" id="repoSelect"><option value="">Ohne Zuordnung</option></select></label>
+      <label>Öffnen über IP oder Domain<input name="url" type="url" required placeholder="http://192.168.1.20:3000"></label>
+      <label>Healthcheck-Adresse<input name="check_url" required placeholder="http://192.168.1.20:3000/health"></label>
+      <label>Prüfart<select name="check_type" id="checkType"><option value="http">HTTP / HTTPS</option><option value="tcp">TCP-Port</option></select></label>
+      <p class="hint">HTTP: 2xx–4xx = erreichbar, 5xx = eingeschränkt. TCP: tcp://host:port. Interne Adressen müssen vom Dashboard-Server aus erreichbar sein.</p>
+      <div id="formError" class="form-error" role="alert"></div>
+    </div>
+    <div class="dialog-actions"><button type="button" id="cancelDialog" class="btn secondary">Abbrechen</button><button class="btn primary" type="submit">Speichern</button></div>
+  </form>
+</dialog>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
