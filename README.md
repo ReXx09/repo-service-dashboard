@@ -14,9 +14,9 @@ docker compose pull
 docker compose up -d
 ```
 
-Dashboard lokal am **Host**: <http://127.0.0.1:8080>. Der Browser fragt nach Benutzername/Passwort aus `.env`. Docker bindet den Port **nur an localhost**, nicht an das öffentliche Netzwerk. Auf einem anderen Computer im LAN ist localhost **nicht** die Serveradresse: nutze Tailscale Serve oder SSH-Portweiterleitung.
+Standardmäßig ist das Dashboard nur lokal am Docker-Host unter <http://127.0.0.1:8080> erreichbar. Für Zugriff im Heimnetz setze `DASHBOARD_BIND_IP` in `.env` auf die feste LAN-IP des Docker-Hosts (bei Unraid z. B. `192.168.1.20`) und öffne `http://<Unraid-LAN-IP>:8080`. Der Port wird dann nur an diese Netzwerkschnittstelle gebunden. Leite Port 8080 nicht im Router ins Internet weiter.
 
-**Wichtig:** HTTP Basic Authentication über unverschlüsseltes HTTP ist nur für Loopback/SSH-Tunnel geeignet. Nicht öffentlich auf Port 8080 freigeben!
+**Wichtig:** Im Heimnetz ist die Verbindung weiterhin unverschlüsseltes HTTP; verwende sie nur in einem vertrauenswürdigen LAN. Für Zugriff über unsichere Netzwerke nutze HTTPS, etwa mit Tailscale Serve. HTTP Basic Authentication über unverschlüsseltes HTTP nicht öffentlich freigeben!
 
 ## Dockge / Container-Image
 
@@ -96,7 +96,7 @@ app/main.py             FastAPI, SQLite, GitHub API, Monitoring
 app/static/index.html   Dashboard-Oberfläche
 app/static/styles.css   Responsive Dark-Mode-Design
 app/static/app.js       Suchfilter, API, Formulare und Live-Refresh
-compose.yaml            Docker Compose mit localhost-Portbindung
+compose.yaml            Docker Compose mit konfigurierbarer Host-IP-Bindung
 Dockerfile              Unprivilegierter Python-Container
 .env.example            Konfigurationsvorlage
 .github/workflows/      Automatischer Build und Veröffentlichung auf GHCR
