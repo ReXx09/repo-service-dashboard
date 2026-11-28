@@ -1,12 +1,130 @@
 .shell {
-    display: block;
+    display: flex;
     min-height: 100vh;
     background:
         radial-gradient(ellipse at 50% -18%, #221b3e 0, transparent 48%),
         #0b0e14;
 }
 
+.repository-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    flex: 0 0 270px;
+    height: 100vh;
+    padding: 21px 13px;
+    overflow: hidden;
+    border-right: 1px solid #222636;
+    background: rgb(14 17 25 / 88%);
+}
+
+.repo-nav-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 9px;
+    padding: 12px 13px;
+    border: 1px solid #282d3b;
+    border-radius: 10px;
+    background: #121620;
+    color: #d7d9e5;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.repo-nav-toggle:hover {
+    border-color: #514477;
+    background: #171b27;
+}
+
+.repo-nav-count {
+    min-width: 22px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: #28223e;
+    color: #b9a4ff;
+    text-align: center;
+    font-size: 10px;
+}
+
+.repo-nav-chevron {
+    margin-left: auto;
+    color: #8c92a5;
+    transition: transform .16s ease;
+}
+
+.repo-nav-toggle[aria-expanded="true"] .repo-nav-chevron {
+    transform: rotate(180deg);
+}
+
+.repo-nav-panel[hidden] {
+    display: none;
+}
+
+.repo-nav-search {
+    width: 100%;
+    margin: 11px 0 8px;
+    padding: 9px 10px;
+    font-size: 12px;
+}
+
+.repo-nav-list {
+    display: grid;
+    gap: 3px;
+    max-height: calc(100vh - 132px);
+    overflow: auto;
+    scrollbar-color: #3a3f51 transparent;
+    scrollbar-width: thin;
+}
+
+.repo-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    padding: 9px 8px;
+    border-radius: 8px;
+    color: #aeb3c5;
+    font-size: 11px;
+}
+
+.repo-nav-link:hover,
+.repo-nav-link:focus-visible {
+    outline: none;
+    background: #211b36;
+    color: #d7ccff;
+}
+
+.repo-nav-icon {
+    display: grid;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 7px;
+    background: #242039;
+    color: #b49bff;
+    font-size: 14px;
+}
+
+.repo-nav-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.repo-nav-empty {
+    padding: 12px 9px;
+    color: #858da0;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 .main--dashboard {
+    flex: 1;
+    min-width: 0;
     min-height: 100vh;
 }
 
@@ -165,6 +283,24 @@
 }
 
 @media (max-width: 720px) {
+    .shell {
+        display: block;
+    }
+
+    .repository-sidebar {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        height: auto;
+        padding: 8px 14px;
+        border-right: 0;
+        border-bottom: 1px solid #222636;
+    }
+
+    .repo-nav-list {
+        max-height: 34vh;
+    }
+
     .dashboard-topbar {
         height: 62px;
         padding: 0 16px;

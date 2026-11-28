@@ -38,6 +38,15 @@
   </section>
 </div>
 <div class="shell" id="appShell" hidden>
+  <aside class="repository-sidebar" aria-label="Repository-Navigation">
+    <button id="repoNavToggle" class="repo-nav-toggle" type="button" aria-expanded="false" aria-controls="repoNavPanel">
+      <span>Repositories</span><span id="repoNavCount" class="repo-nav-count">0</span><span class="repo-nav-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div id="repoNavPanel" class="repo-nav-panel" hidden>
+      <input id="repoNavSearch" class="repo-nav-search" type="search" placeholder="Repository suchen ..." aria-label="Repository suchen">
+      <nav id="repoNavList" class="repo-nav-list" aria-label="GitHub-Repositories"></nav>
+    </div>
+  </aside>
   <main class="main main--dashboard">
     <header class="topbar dashboard-topbar">
       <div class="brand"><span class="brandlogo">◈</span><div>REPO<span class="accent">PULSE</span><small>CONTROL CENTER</small></div></div>
@@ -80,13 +89,6 @@
             <select id="statusFilter" aria-label="Statusfilter"><option value="all">Alle Status</option><option value="online">Online</option><option value="offline">Offline</option><option value="degraded">Eingeschränkt</option><option value="pending">Noch nicht geprüft</option></select>
           </div>
           <div id="serviceAdminList" class="service-admin-list"></div>
-        </section>
-        <section id="repos" class="panel">
-          <div class="panel-head">
-            <div><h2>GitHub Repositories <span id="repoBadge" class="count-badge">0</span></h2><p>Automatisch aus deinem Account synchronisiert</p></div>
-            <input id="repoSearch" class="search" type="search" placeholder="⌕  Repository suchen ..." aria-label="Repository suchen">
-          </div>
-          <div id="repoList" class="repo-list"></div>
         </section>
         <div class="footer"><span>RepoPulse · Self-hosted Dashboard</span><span id="settingsMeta">Noch nicht synchronisiert</span></div>
       </section>

@@ -56,7 +56,7 @@ HTTP 2xx–4xx gilt als erreichbar (z. B. Login mit HTTP 401), HTTP 5xx als gest
 
 ## Service-Kacheln
 
-Die Startseite zeigt im Heimdall-/Fenrus-Stil nur die Service-Kacheln. Ein Klick öffnet die gespeicherte `url` in einem neuen Tab; der Status bleibt auf der Kachel sichtbar. Über das Zahnrad oben rechts erreichst du die Einstellungen für Services, Monitoring und GitHub. Dort lassen sich Kacheln gestalten; **Kacheln sortieren** öffnet den Layout-Modus mit Drag-and-drop oder ↑/↓. Anordnung und Design werden im SQLite-Volume gespeichert.
+Die Startseite zeigt im Heimdall-/Fenrus-Stil die Service-Kacheln. Ein Klick öffnet die gespeicherte `url` in einem neuen Tab; der Status bleibt auf der Kachel sichtbar. Die Repository-Navigation links ist einklappbar und durchsuchbar; ein Eintrag öffnet das Repository auf GitHub. Über das Zahnrad oben rechts erreichst du die Einstellungen für Services und Monitoring. Dort lassen sich Kacheln gestalten; **Kacheln sortieren** öffnet den Layout-Modus mit Drag-and-drop oder ↑/↓. Anordnung und Design werden im SQLite-Volume gespeichert.
 
 ## Sicherheit / Grenzen
 

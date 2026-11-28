@@ -281,6 +281,31 @@ function renderServiceSettings(service) {
     return row;
 }
 
+function renderRepositories(repos) {
+    const list = $('repoNavList');
+    const query = $('repoNavSearch').value.toLowerCase().trim();
+    const found = repos.filter(repo =>
+        (repo.full_name + ' ' + (repo.description || '')).toLowerCase().includes(query));
+    $('repoNavCount').textContent = repos.length;
+    list.replaceChildren();
+    if (!found.length) {
+        list.append(el('div', 'repo-nav-empty', repos.length
+            ? 'Keine passenden Repositories.'
+            : 'Noch keine Repositories synchronisiert.'));
+        return;
+    }
+
+    for (const repo of found) {
+        const item = link(repo.url, '', 'repo-nav-link');
+        item.title = repo.full_name;
+        item.append(
+            el('span', 'repo-nav-icon', '⌘'),
+            el('span', 'repo-nav-name', repo.full_name)
+        );
+        list.append(item);
+    }
+}
+
 function render() {
     const services = data.services || [];
     const repos = data.repos || [];
@@ -289,8 +314,8 @@ function render() {
     $('onlineCount').textContent = services.filter(service => service.status === 'online').length;
     $('offlineCount').textContent = services.filter(service => ['offline', 'degraded'].includes(service.status)).length;
     $('serviceBadge').textContent = services.length;
-    $('repoBadge').textContent = repos.length;
     $('settingsMeta').textContent = `GitHub-Sync: ${dateStr(data.meta.github_sync)} · Letzter Check: ${data.meta.monitor ? new Date(data.meta.monitor).toLocaleString('de-DE') : '—'}`;
+    renderRepositories(repos);
 
     $('alerts').replaceChildren();
     if (data.meta.github_error) showError(data.meta.github_error);
@@ -326,32 +351,6 @@ function render() {
         for (const service of filteredServices) serviceAdminList.append(renderServiceSettings(service));
     }
 
-    const repoList = $('repoList');
-    repoList.replaceChildren();
-    const query = $('repoSearch').value.toLowerCase().trim();
-    const found = repos.filter(repo => (repo.full_name + ' ' + (repo.description || '')).toLowerCase().includes(query));
-    if (!found.length) {
-        showEmpty(repoList, repos.length
-            ? 'Keine passenden Repositories.'
-            : 'Noch keine GitHub-Repositories. Bitte GITHUB_TOKEN hinterlegen und synchronisieren.');
-    }
-
-    for (const repo of found) {
-        const item = el('div', 'repo-item');
-        const left = el('div', 'repo-left');
-        const info = el('div');
-        info.append(
-            el('div', 'repo-name', repo.full_name),
-            el('div', 'repo-desc', repo.description || 'Keine Beschreibung')
-        );
-        left.append(el('span', 'repo-icon', '⌘'), info);
-        const right = el('div', 'repo-right');
-        right.append(el('span', 'tag', repo.visibility === 'private' ? 'Privat' : 'Öffentlich'));
-        if (repo.language) right.append(el('span', 'tag', repo.language));
-        right.append(el('span', 'repo-date', dateStr(repo.pushed_at)), link(repo.url, 'GitHub ↗', 'openlink'));
-        item.append(left, right);
-        repoList.append(item);
-    }
 }
 
 function showEmpty(parent, text) {
@@ -454,7 +453,13 @@ $('logoutButton').onclick = async () => {
 $('addButton').onclick = () => openDialog();
 $('closeDialog').onclick = $('cancelDialog').onclick = () => $('serviceDialog').close();
 $('statusFilter').onchange = render;
-$('repoSearch').oninput = render;
+$('repoNavToggle').onclick = () => {
+    const expanded = $('repoNavToggle').getAttribute('aria-expanded') !== 'true';
+    $('repoNavToggle').setAttribute('aria-expanded', String(expanded));
+    $('repoNavPanel').hidden = !expanded;
+    if (expanded) $('repoNavSearch').focus();
+};
+$('repoNavSearch').oninput = () => renderRepositories(data.repos || []);
 $('settingsButton').onclick = () => setView('settings');
 $('backButton').onclick = () => setView('dashboard');
 $('layoutButton').onclick = () => {
