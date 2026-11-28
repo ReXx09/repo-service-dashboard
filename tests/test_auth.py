@@ -37,6 +37,7 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(status.json(), {"setup_required": True, "authenticated": False})
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/static/auth.css").status_code, 200)
+        self.assertEqual(self.client.get("/static/dashboard.css").status_code, 200)
         self.assertEqual(self.client.get("/api/dashboard").status_code, 401)
 
         setup = self.client.post(

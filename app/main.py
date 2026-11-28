@@ -307,7 +307,7 @@ async def home():
 
 @app.get("/static/{filename}")
 async def static_file(filename: str):
-    if filename not in {"app.js", "styles.css", "auth.css", "tiles.css"}:
+    if filename not in {"app.js", "styles.css", "auth.css", "tiles.css", "dashboard.css"}:
         raise HTTPException(404)
     return FileResponse(Path(__file__).parent / "static" / filename)
 

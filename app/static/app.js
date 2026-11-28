@@ -71,7 +71,7 @@ async function api(path, options = {}) {
 
 function showError(message) {
     const alert = el('div', 'alert', message);
-    $('alerts').replaceChildren(alert);
+    $('alerts').append(alert);
 }
 
 function refreshTileStyles() {
@@ -155,70 +155,60 @@ function openTileDialog(service) {
     $('tileDialog').showModal();
 }
 
-function render() {
-    const services = data.services || [];
-    const repos = data.repos || [];
-    $('repoCount').textContent = repos.length;
-    $('serviceCount').textContent = services.length;
-    $('onlineCount').textContent = services.filter(service => service.status === 'online').length;
-    $('offlineCount').textContent = services.filter(service => ['offline', 'degraded'].includes(service.status)).length;
-    $('serviceBadge').textContent = services.length;
-    $('repoBadge').textContent = repos.length;
-    $('updated').textContent = 'GitHub-Sync: ' + dateStr(data.meta.github_sync);
-    $('lastMonitor').textContent = 'Letzter Check: ' + (data.meta.monitor ? new Date(data.meta.monitor).toLocaleString('de-DE') : '—');
+function setView(view) {
+    layoutMode = false;
+    $('dashboardView').hidden = view !== 'dashboard';
+    $('settingsView').hidden = view !== 'settings';
+    $('layoutDoneButton').hidden = true;
+    $('settingsButton').hidden = view === 'settings';
+    $('layoutHint').hidden = true;
+    $('appShell').classList.remove('layout-editing');
+    render();
+}
 
-    $('alerts').replaceChildren();
-    if (data.meta.github_error) showError(data.meta.github_error);
-    if (data.meta.monitor_error) showError(data.meta.monitor_error);
+function deleteService(service) {
+    if (!confirm(`Service „${service.name}“ wirklich löschen?`)) return;
+    api('/api/services/' + service.id, {method: 'DELETE'})
+        .then(refresh)
+        .catch(error => showError(error.message));
+}
 
-    $('appShell').classList.toggle('layout-editing', layoutMode);
-    $('layoutButton').textContent = layoutMode ? 'Fertig' : 'Layout anpassen';
-    $('layoutHint').hidden = !layoutMode;
-    $('statusFilter').disabled = layoutMode;
-    const filtered = services.filter(service => $('statusFilter').value === 'all' || $('statusFilter').value === service.status);
-    const serviceList = $('serviceList');
-    serviceList.replaceChildren();
-    if (!filtered.length) {
-        showEmpty(serviceList, services.length
-            ? 'Keine Services mit diesem Status.'
-            : 'Noch keine Services. Mit „Service hinzufügen“ kannst du deinen ersten Endpunkt anlegen.');
-    }
+function renderTile(service) {
+    const card = el(
+        'article',
+        `service-tile tile--w${service.tile_width} tile--h${service.tile_height} tile--${service.tile_shape}`
+    );
+    card.id = `service-tile-${service.id}`;
+    card.draggable = layoutMode;
+    const mainLink = link(service.url, '', 'tile-main');
+    mainLink.onclick = event => {
+        if (layoutMode) event.preventDefault();
+    };
+    const heading = el('div', 'tile-heading');
+    const identity = el('div');
+    identity.append(
+        el('div', 'tile-name', service.name),
+        el('div', 'tile-repo', service.repo_full_name || 'Ohne Repository-Zuordnung')
+    );
+    heading.append(
+        identity,
+        el('span', 'status ' + service.status, ({
+            online: 'Online',
+            offline: 'Offline',
+            degraded: 'Gestört',
+            pending: 'Ausstehend'
+        })[service.status] || service.status)
+    );
+    const footer = el('div', 'tile-footer');
+    footer.append(
+        el('span', service.error ? 'tile-error' : 'tile-meta', service.error
+            || (service.last_checked ? `${service.latency_ms} ms · ${dateStr(service.last_checked)}` : 'Noch nicht geprüft')),
+        el('span', 'tile-open', '↗')
+    );
+    mainLink.append(heading, footer);
+    card.append(mainLink);
 
-    for (const service of filtered) {
-        const card = el(
-            'article',
-            `service-tile tile--w${service.tile_width} tile--h${service.tile_height} tile--${service.tile_shape}`
-        );
-        card.id = `service-tile-${service.id}`;
-        card.draggable = layoutMode;
-        const mainLink = link(service.url, '', 'tile-main');
-        mainLink.onclick = event => {
-            if (layoutMode) event.preventDefault();
-        };
-        const heading = el('div', 'tile-heading');
-        const identity = el('div');
-        identity.append(
-            el('div', 'tile-name', service.name),
-            el('div', 'tile-repo', service.repo_full_name || 'Ohne Repository-Zuordnung')
-        );
-        heading.append(
-            identity,
-            el('span', 'status ' + service.status, ({
-                online: 'Online',
-                offline: 'Offline',
-                degraded: 'Gestört',
-                pending: 'Ausstehend'
-            })[service.status] || service.status)
-        );
-        const footer = el('div', 'tile-footer');
-        footer.append(
-            el('span', service.error ? 'tile-error' : 'tile-meta', service.error
-                || (service.last_checked ? `${service.latency_ms} ms · ${dateStr(service.last_checked)}` : 'Noch nicht geprüft')),
-            el('span', 'tile-open', '↗')
-        );
-        mainLink.append(heading, footer);
-        card.append(mainLink);
-
+    if (layoutMode) {
         const controls = el('div', 'tile-controls');
         controls.append(el('span', 'tile-handle', '⠿ Ziehen'));
         const up = el('button', 'mini', '↑');
@@ -229,39 +219,17 @@ function render() {
         down.type = 'button';
         down.title = 'Kachel nach unten verschieben';
         down.onclick = () => moveTileBy(service.id, 1);
-        const design = el('button', 'mini', 'Design');
-        design.type = 'button';
-        design.onclick = () => openTileDialog(service);
-        const edit = el('button', 'mini', 'Service');
-        edit.type = 'button';
-        edit.onclick = () => openDialog(service);
-        const remove = el('button', 'mini', '×');
-        remove.type = 'button';
-        remove.title = 'Service löschen';
-        remove.onclick = async () => {
-            if (!confirm(`Service „${service.name}“ wirklich löschen?`)) return;
-            try {
-                await api('/api/services/' + service.id, {method: 'DELETE'});
-                await refresh();
-            } catch (error) {
-                showError(error.message);
-            }
-        };
-        controls.append(up, down, design, edit, remove);
+        controls.append(up, down);
         card.append(controls);
 
         card.addEventListener('dragstart', event => {
-            if (!layoutMode) {
-                event.preventDefault();
-                return;
-            }
             draggedServiceId = service.id;
             card.classList.add('is-dragging');
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', String(service.id));
         });
         card.addEventListener('dragover', event => {
-            if (!layoutMode || draggedServiceId === null || draggedServiceId === service.id) return;
+            if (draggedServiceId === null || draggedServiceId === service.id) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = 'move';
             card.classList.add('drop-target');
@@ -280,7 +248,82 @@ function render() {
             card.classList.remove('is-dragging');
             document.querySelectorAll('.service-tile').forEach(tile => tile.classList.remove('drop-target'));
         });
-        serviceList.append(card);
+    }
+    return card;
+}
+
+function renderServiceSettings(service) {
+    const row = el('article', 'service-admin-row');
+    const info = el('div', 'service-admin-info');
+    const name = el('strong', '', service.name);
+    const target = el('span', 'service-admin-target', hostLabel(service.url));
+    const error = service.error ? el('span', 'service-admin-error', service.error) : null;
+    info.append(name, target);
+    if (error) info.append(error);
+    const status = el('span', 'status ' + service.status, ({
+        online: 'Online',
+        offline: 'Offline',
+        degraded: 'Gestört',
+        pending: 'Ausstehend'
+    })[service.status] || service.status);
+    const actions = el('div', 'service-admin-actions');
+    const design = el('button', 'mini', 'Kachel');
+    design.type = 'button';
+    design.onclick = () => openTileDialog(service);
+    const edit = el('button', 'mini', 'Bearbeiten');
+    edit.type = 'button';
+    edit.onclick = () => openDialog(service);
+    const remove = el('button', 'mini', 'Löschen');
+    remove.type = 'button';
+    remove.onclick = () => deleteService(service);
+    actions.append(design, edit, remove);
+    row.append(info, status, actions);
+    return row;
+}
+
+function render() {
+    const services = data.services || [];
+    const repos = data.repos || [];
+    $('repoCount').textContent = repos.length;
+    $('serviceCount').textContent = services.length;
+    $('onlineCount').textContent = services.filter(service => service.status === 'online').length;
+    $('offlineCount').textContent = services.filter(service => ['offline', 'degraded'].includes(service.status)).length;
+    $('serviceBadge').textContent = services.length;
+    $('repoBadge').textContent = repos.length;
+    $('settingsMeta').textContent = `GitHub-Sync: ${dateStr(data.meta.github_sync)} · Letzter Check: ${data.meta.monitor ? new Date(data.meta.monitor).toLocaleString('de-DE') : '—'}`;
+
+    $('alerts').replaceChildren();
+    if (data.meta.github_error) showError(data.meta.github_error);
+    if (data.meta.monitor_error) showError(data.meta.monitor_error);
+
+    $('appShell').classList.toggle('layout-editing', layoutMode);
+    $('layoutHint').hidden = !layoutMode;
+    $('layoutDoneButton').hidden = !layoutMode;
+    const dashboardServiceList = $('dashboardServiceList');
+    dashboardServiceList.replaceChildren();
+    if (!services.length) {
+        const empty = el('div', 'dashboard-empty');
+        empty.append(
+            el('h1', '', 'Dein Dashboard'),
+            el('p', '', 'Füge in den Einstellungen deinen ersten Service hinzu.'),
+        );
+        const settingsLink = el('button', 'btn primary', 'Einstellungen öffnen');
+        settingsLink.type = 'button';
+        settingsLink.onclick = () => setView('settings');
+        empty.append(settingsLink);
+        dashboardServiceList.append(empty);
+    } else {
+        for (const service of services) dashboardServiceList.append(renderTile(service));
+    }
+
+    const serviceAdminList = $('serviceAdminList');
+    serviceAdminList.replaceChildren();
+    const filteredServices = services.filter(service =>
+        $('statusFilter').value === 'all' || $('statusFilter').value === service.status);
+    if (!filteredServices.length) {
+        showEmpty(serviceAdminList, services.length ? 'Keine Services mit diesem Status.' : 'Noch keine Services konfiguriert.');
+    } else {
+        for (const service of filteredServices) serviceAdminList.append(renderServiceSettings(service));
     }
 
     const repoList = $('repoList');
@@ -412,9 +455,19 @@ $('addButton').onclick = () => openDialog();
 $('closeDialog').onclick = $('cancelDialog').onclick = () => $('serviceDialog').close();
 $('statusFilter').onchange = render;
 $('repoSearch').oninput = render;
+$('settingsButton').onclick = () => setView('settings');
+$('backButton').onclick = () => setView('dashboard');
 $('layoutButton').onclick = () => {
-    layoutMode = !layoutMode;
-    if (layoutMode) $('statusFilter').value = 'all';
+    layoutMode = true;
+    $('dashboardView').hidden = false;
+    $('settingsView').hidden = true;
+    $('settingsButton').hidden = true;
+    $('layoutDoneButton').hidden = false;
+    render();
+};
+$('layoutDoneButton').onclick = () => {
+    layoutMode = false;
+    $('settingsButton').hidden = false;
     render();
 };
 $('closeTileDialog').onclick = $('cancelTileDialog').onclick = () => $('tileDialog').close();

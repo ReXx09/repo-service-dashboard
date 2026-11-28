@@ -42,7 +42,7 @@ Die Synchronisierung lädt Metadaten (nicht den Quellcode). Sie zeigt `pushed_at
 
 ## Service anlegen
 
-Dashboard → **+ Service hinzufügen**:
+Einstellungen → **+ Service hinzufügen**:
 
 | Feld | Beispiel | Zweck |
 |---|---|---|
@@ -56,7 +56,7 @@ HTTP 2xx–4xx gilt als erreichbar (z. B. Login mit HTTP 401), HTTP 5xx als gest
 
 ## Service-Kacheln
 
-Jeder Service erscheint als eigene Dashboard-Kachel und öffnet beim Anklicken seine gespeicherte `url` in einem neuen Tab. Über **Layout anpassen** lassen sich Kacheln per Drag-and-drop oder ↑/↓ sortieren. **Design** ändert Grid-Breite/-Höhe, Farbe und Form. Anordnung und Design werden im SQLite-Volume gespeichert.
+Die Startseite zeigt im Heimdall-/Fenrus-Stil nur die Service-Kacheln. Ein Klick öffnet die gespeicherte `url` in einem neuen Tab; der Status bleibt auf der Kachel sichtbar. Über das Zahnrad oben rechts erreichst du die Einstellungen für Services, Monitoring und GitHub. Dort lassen sich Kacheln gestalten; **Kacheln sortieren** öffnet den Layout-Modus mit Drag-and-drop oder ↑/↓. Anordnung und Design werden im SQLite-Volume gespeichert.
 
 ## Sicherheit / Grenzen
 
@@ -102,6 +102,7 @@ app/static/index.html   Dashboard-Oberfläche
 app/static/styles.css   Responsive Dark-Mode-Design
 app/static/auth.css     Ersteinrichtung und Login
 app/static/tiles.css    Grid-Kacheln und Layout-Editor
+app/static/dashboard.css Kachel-Startseite und Einstellungen
 app/static/app.js       Suchfilter, API, Formulare und Live-Refresh
 compose.yaml            Docker Compose mit konfigurierbarer Host-IP-Bindung
 Dockerfile              Unprivilegierter Python-Container

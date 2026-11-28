@@ -1,0 +1,224 @@
+.shell {
+    display: block;
+    min-height: 100vh;
+    background:
+        radial-gradient(ellipse at 50% -18%, #221b3e 0, transparent 48%),
+        #0b0e14;
+}
+
+.main--dashboard {
+    min-height: 100vh;
+}
+
+.dashboard-topbar {
+    height: 74px;
+    padding: 0 clamp(18px, 4vw, 56px);
+    border-bottom-color: #202432;
+    background: rgb(11 14 20 / 78%);
+    backdrop-filter: blur(14px);
+}
+
+.dashboard-topbar .brand {
+    padding: 0;
+}
+
+.dashboard-topbar .brandlogo {
+    width: 36px;
+    height: 36px;
+    font-size: 23px;
+}
+
+.dashboard-topbar .topright {
+    gap: 14px;
+}
+
+.settings-button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #303447;
+    border-radius: 11px;
+    background: #171b27;
+    color: #c9c4dc;
+    font-size: 19px;
+    transition: color .16s ease, border-color .16s ease, transform .16s ease;
+}
+
+.settings-button:hover {
+    border-color: #8065d8;
+    color: #c4b4ff;
+    transform: rotate(20deg);
+}
+
+.main--dashboard .content {
+    max-width: 1680px;
+    padding: clamp(22px, 4vw, 56px);
+}
+
+.dashboard-view {
+    min-height: calc(100vh - 180px);
+}
+
+#dashboardServiceList.service-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: minmax(160px, 210px);
+    gap: 18px;
+    padding: 0;
+}
+
+#dashboardServiceList .service-tile {
+    box-shadow: 0 12px 34px rgb(0 0 0 / 19%);
+}
+
+#dashboardServiceList .tile-main {
+    padding: 23px;
+}
+
+.dashboard-empty {
+    grid-column: 1 / -1;
+    align-self: center;
+    justify-self: center;
+    padding: 48px 20px;
+    text-align: center;
+}
+
+.dashboard-empty h1 {
+    font-size: clamp(27px, 5vw, 42px);
+}
+
+.dashboard-empty p {
+    margin-bottom: 22px;
+}
+
+.layout-hint {
+    padding: 0 0 16px;
+}
+
+.settings-view[hidden],
+.dashboard-view[hidden] {
+    display: none;
+}
+
+.settings-view .heading {
+    align-items: flex-end;
+}
+
+.settings-view .actions {
+    justify-content: flex-end;
+}
+
+.settings-view .stats {
+    margin-top: 20px;
+}
+
+.service-admin-list {
+    display: grid;
+}
+
+.service-admin-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 18px;
+    padding: 15px 22px;
+    border-bottom: 1px solid #242936;
+}
+
+.service-admin-row:last-child {
+    border-bottom: 0;
+}
+
+.service-admin-info {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+}
+
+.service-admin-info strong {
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.service-admin-target,
+.service-admin-error {
+    overflow-wrap: anywhere;
+    color: #858da0;
+    font-size: 11px;
+}
+
+.service-admin-error {
+    color: #ff929c;
+}
+
+.service-admin-actions {
+    display: flex;
+    gap: 7px;
+}
+
+@media (max-width: 1100px) {
+    #dashboardServiceList.service-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .settings-view .heading {
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 720px) {
+    .dashboard-topbar {
+        height: 62px;
+        padding: 0 16px;
+    }
+
+    .dashboard-topbar .brand {
+        font-size: 15px;
+    }
+
+    .dashboard-topbar .brandlogo {
+        width: 32px;
+        height: 32px;
+        font-size: 20px;
+    }
+
+    .main--dashboard .content {
+        padding: 21px 14px;
+    }
+
+    #dashboardServiceList.service-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: minmax(145px, 190px);
+        gap: 11px;
+    }
+
+    #dashboardServiceList .tile-main {
+        padding: 16px;
+    }
+
+    .service-admin-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 14px;
+    }
+
+    .service-admin-row > .status {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .service-admin-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 480px) {
+    #dashboardServiceList.service-grid {
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-rows: 155px;
+    }
+
+    #dashboardServiceList .service-tile[class*="tile--w"] {
+        grid-column: span 1;
+    }
+
+}
